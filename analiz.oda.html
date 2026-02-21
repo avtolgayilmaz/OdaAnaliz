@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oda Kullanım Analizi</title>
+    <!-- Tüm kütüphaneler CDN üzerinden yüklenecek, internet gerektirir -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}
+        .container{max-width:1200px;margin:0 auto;background:white;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden}
+        header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:40px;text-align:center}
+        h1{margin:0;font-size:2.5em}
+        .main-content{padding:40px}
+        .upload-area{border:3px dashed #667eea;border-radius:20px;padding:60px;text-align:center;background:#f8f9ff;cursor:pointer;transition:all 0.3s;margin-bottom:30px}
+        .upload-area:hover{background:#edf2f7;transform:translateY(-2px)}
+        .btn{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border:none;padding:15px 35px;border-radius:30px;cursor:pointer;font-size:16px;font-weight:bold;margin:10px;box-shadow:0 4px 15px rgba(102,126,234,0.4)}
+        .btn:hover{transform:scale(1.05)}
+        .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:30px}
+        .stat-card{background:white;padding:25px;border-radius:15px;box-shadow:0 4px 6px rgba(0,0,0,0.1);border-left:5px solid #667eea;text-align:center}
+        .stat-value{font-size:2.5em;font-weight:bold;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .chart-container{height:400px;margin:30px 0;background:white;padding:20px;border-radius:15px;box-shadow:0 4px 6px rgba(0,0,0,0.1)}
+        table{width:100%;border-collapse:collapse;background:white;border-radius:15px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)}
+        th{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:15px;text-align:left;cursor:pointer}
+        td{padding:12px 15px;border-bottom:1px solid #e2e8f0}
+        tr:hover{background:#f7fafc}
+        .progress-bar{width:100%;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden}
+        .progress-fill{height:100%;background:linear-gradient(90deg,#667eea 0%,#764ba2 100%)}
+        .hidden{display:none}
+        .loading{text-align:center;padding:50px}
+        .spinner{width:50px;height:50px;border:5px solid #e2e8f0;border-top-color:#667eea;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .badge{display:inline-block;padding:5px 12px;border-radius:20px;font-size:0.85em;font-weight:bold;background:#e6fffa;color:#234e52}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏢 Oda Kullanım Analizi</h1>
+            <p>Excel dosyanızı yükleyin, anında analiz edin</p>
+        </header>
+        
+        <div class="main-content">
+            <!-- Yükleme Alanı -->
+            <div id="uploadSection">
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <div style="font-size:4em;margin-bottom:20px">📊</div>
+                    <h2>Excel Dosyanızı Sürükleyin veya Seçin</h2>
+                    <p style="color:#718096;margin:15px 0">Desteklenen formatlar: .xlsx, .xls, .csv</p>
+                    <p style="font-size:0.9em;color:#a0aec0">Beklenen sütunlar: 房间XID, 用户XID, 进房时间, 出房时间</p>
+                    <button class="btn" style="margin-top:25px">📁 Dosya Seç</button>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFile(event)">
+                </div>
+            </div>
+
+            <!-- Yükleniyor -->
+            <div id="loadingSection" class="hidden loading">
+                <div class="spinner"></div>
+                <h3>Dosya Analiz Ediliyor...</h3>
+                <p>Lütfen bekleyin</p>
+            </div>
+
+            <!-- Sonuçlar -->
+            <div id="resultsSection" class="hidden">
+                <!-- İstatistikler -->
+                <div class="stats">
+                    <div class="stat-card">
+                        <div style="color:#718096;font-size:0.9em;text-transform:uppercase">Toplam Oda</div>
+                        <div class="stat-value" id="statTotalRooms">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div style="color:#718096;font-size:0.9em;text-transform:uppercase">Toplam Süre</div>
+                        <div class="stat-value" id="statTotalTime">0</div>
+                        <div style="color:#a0aec0">dakika</div>
+                    </div>
+                    <div class="stat-card">
+                        <div style="color:#718096;font-size:0.9em;text-transform:uppercase">Ortalama/Oda</div>
+                        <div class="stat-value" id="statAvgTime">0</div>
+                        <div style="color:#a0aec0">dakika</div>
+                    </div>
+                    <div class="stat-card">
+                        <div style="color:#718096;font-size:0.9em;text-transform:uppercase">En Çok Kullanılan</div>
+                        <div class="stat-value" id="statTopRoom" style="font-size:1.8em">-</div>
+                    </div>
+                </div>
+
+                <!-- Grafik -->
+                <div class="chart-container">
+                    <canvas id="barChart"></canvas>
+                </div>
+
+                <!-- Tablo -->
+                <table>
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable(0)">Sıra ↕</th>
+                            <th onclick="sortTable(1)">Oda ID ↕</th>
+                            <th onclick="sortTable(2)">Kullanıcı ID ↕</th>
+                            <th onclick="sortTable(3)">Toplam Süre (dk) ↕</th>
+                            <th onclick="sortTable(4)">Oran ↕</th>
+                            <th>Ziyaret</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+
+                <!-- Butonlar -->
+                <div style="text-align:center;margin-top:30px">
+                    <button class="btn" onclick="exportExcel()">📥 Excel İndir</button>
+                    <button class="btn" onclick="window.print()">🖨️ Yazdır</button>
+                    <button class="btn" onclick="resetApp()" style="background:#718096">🔄 Yeni Analiz</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let analysisData = [];
+        let chartInstance = null;
+
+        // Sürükle-bırak desteği
+        const uploadArea = document.querySelector('.upload-area');
+        
+        ['dragenter','dragover','dragleave','drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter','dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave','drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            uploadArea.style.background = '#e6fffa';
+            uploadArea.style.borderColor = '#38b2ac';
+        }
+
+        function unhighlight(e) {
+            uploadArea.style.background = '#f8f9ff';
+            uploadArea.style.borderColor = '#667eea';
+        }
+
+        uploadArea.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if(files.length) processFile(files[0]);
+        }
+
+        function handleFile(e) {
+            if(e.target.files.length) processFile(e.target.files[0]);
+        }
+
+        function processFile(file) {
+            // Dosya tipi kontrolü
+            const validTypes = ['.xlsx','.xls','.csv'];
+            const ext = '.' + file.name.split('.').pop().toLowerCase();
+            
+            if(!validTypes.includes(ext)) {
+                alert('Lütfen geçerli bir Excel dosyası seçin!');
+                return;
+            }
+
+            // UI güncelle
+            document.getElementById('uploadSection').classList.add('hidden');
+            document.getElementById('loadingSection').classList.remove('hidden');
+
+            // Dosyayı oku
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    if(ext === '.csv') {
+                        processCSV(e.target.result);
+                    } else {
+                        processExcel(e.target.result);
+                    }
+                } catch(err) {
+                    alert('Hata: ' + err.message);
+                    resetApp();
+                }
+            };
+            
+            if(ext === '.csv') {
+                reader.readAsText(file);
+            } else {
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        function processCSV(data) {
+            const lines = data.split('\n');
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,''));
+            const jsonData = [];
+            
+            for(let i=1; i<lines.length; i++) {
+                if(!lines[i].trim()) continue;
+                const values = lines[i].split(',');
+                const row = {};
+                headers.forEach((h, idx) => {
+                    row[h] = values[idx] ? values[idx].trim().replace(/"/g,'') : '';
+                });
+                jsonData.push(row);
+            }
+            analyzeData(jsonData);
+        }
+
+        function processExcel(data) {
+            const arr = new Uint8Array(data);
+            const workbook = XLSX.read(arr, {type: 'array'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+            analyzeData(jsonData);
+        }
+
+        function analyzeData(data) {
+            console.log('İşlenen veri örneği:', data[0]);
+            
+            const roomStats = {};
+            let errorCount = 0;
+            
+            data.forEach((row, idx) => {
+                try {
+                    // Farklı sütun isimlerini destekle
+                    const roomId = row['房间XID'] || row['RoomID'] || row['room_id'] || row['Oda'];
+                    const userId = row['用户XID'] || row['UserID'] || row['user_id'] || row['Kullanici'];
+                    let startTime = row['进房时间'] || row['StartTime'] || row['Giris'] || row['start_time'];
+                    let endTime = row['出房时间'] || row['EndTime'] || row['Cikis'] || row['end_time'];
+                    
+                    if(!roomId || !startTime || !endTime) {
+                        errorCount++;
+                        return;
+                    }
+                    
+                    // Tarih formatını düzelt
+                    startTime = fixDate(startTime);
+                    endTime = fixDate(endTime);
+                    
+                    const start = new Date(startTime);
+                    const end = new Date(endTime);
+                    
+                    if(isNaN(start.getTime()) || isNaN(end.getTime())) {
+                        errorCount++;
+                        return;
+                    }
+                    
+                    const duration = (end - start) / 1000 / 60; // dakika
+                    
+                    if(duration < 0 || duration > 1440) { // 24 saatten fazla olamaz
+                        console.warn('Şüpheli süre:', duration, row);
+                    }
+                    
+                    const key = `${roomId}_${userId}`;
+                    
+                    if(!roomStats[key]) {
+                        roomStats[key] = {
+                            roomId: roomId,
+                            userId: userId,
+                            totalMinutes: 0,
+                            visits: 0
+                        };
+                    }
+                    
+                    roomStats[key].totalMinutes += duration;
+                    roomStats[key].visits++;
+                    
+                } catch(e) {
+                    errorCount++;
+                }
+            });
+            
+            if(errorCount > 0) {
+                console.warn(`${errorCount} satır atlandı`);
+            }
+            
+            analysisData = Object.values(roomStats).sort((a,b) => b.totalMinutes - a.totalMinutes);
+            
+            if(analysisData.length === 0) {
+                alert('Veri bulunamadı! Sütun isimlerini kontrol edin.');
+                resetApp();
+                return;
+            }
+            
+            showResults();
+        }
+
+        function fixDate(dateStr) {
+            if(typeof dateStr !== 'string') return dateStr;
+            
+            // MM/DD/YYYY formatını YYYY-MM-DD'ye çevir
+            if(dateStr.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+                const parts = dateStr.split(' ');
+                const dateParts = parts[0].split('/');
+                const timePart = parts[1] || '00:00:00';
+                return `${dateParts[2]}-${dateParts[0]}-${dateParts[1]} ${timePart}`;
+            }
+            
+            return dateStr;
+        }
+
+        function showResults() {
+            document.getElementById('loadingSection').classList.add('hidden');
+            document.getElementById('resultsSection').classList.remove('hidden');
+            
+            const totalTime = analysisData.reduce((sum, item) => sum + item.totalMinutes, 0);
+            const avgTime = totalTime / analysisData.length;
+            
+            // İstatistikler
+            document.getElementById('statTotalRooms').textContent = analysisData.length;
+            document.getElementById('statTotalTime').textContent = totalTime.toFixed(1);
+            document.getElementById('statAvgTime').textContent = avgTime.toFixed(1);
+            document.getElementById('statTopRoom').textContent = analysisData[0].roomId;
+            
+            // Grafik
+            createChart();
+            
+            // Tablo
+            renderTable(totalTime);
+        }
+
+        function createChart() {
+            const ctx = document.getElementById('barChart').getContext('2d');
+            const top10 = analysisData.slice(0, 10);
+            
+            if(chartInstance) {
+                chartInstance.destroy();
+            }
+            
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: top10.map(item => `Oda ${item.roomId}`),
+                    datasets: [{
+                        label: 'Geçirilen Süre (Dakika)',
+                        data: top10.map(item => item.totalMinutes.toFixed(2)),
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'En Çok Kullanılan 10 Oda',
+                            font: { size: 16 }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Dakika' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderTable(totalTime) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            analysisData.forEach((item, index) => {
+                const percentage = ((item.totalMinutes / totalTime) * 100);
+                const row = tbody.insertRow();
+                
+                row.innerHTML = `
+                    <td><span class="badge">#${index + 1}</span></td>
+                    <td><strong>${item.roomId}</strong></td>
+                    <td>${item.userId}</td>
+                    <td><strong>${item.totalMinutes.toFixed(2)}</strong></td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <span style="min-width:50px">${percentage.toFixed(1)}%</span>
+                            <div class="progress-bar" style="width:100px">
+                                <div class="progress-fill" style="width:${Math.min(percentage, 100)}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="badge" style="background:#fef5e7;color:#975a16">${item.visits} ziyaret</span></td>
+                `;
+            });
+        }
+
+        let sortDir = {};
+
+        function sortTable(colIndex) {
+            const table = document.querySelector('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            sortDir[colIndex] = !sortDir[colIndex];
+            const dir = sortDir[colIndex] ? 1 : -1;
+            
+            rows.sort((a, b) => {
+                const aText = a.cells[colIndex].textContent.trim();
+                const bText = b.cells[colIndex].textContent.trim();
+                
+                const aNum = parseFloat(aText);
+                const bNum = parseFloat(bText);
+                
+                if(!isNaN(aNum) && !isNaN(bNum)) {
+                    return (aNum - bNum) * dir;
+                }
+                
+                return aText.localeCompare(bText) * dir;
+            });
+            
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function exportExcel() {
+            const exportData = analysisData.map((item, index) => ({
+                'Sıra': index + 1,
+                'Oda_ID': item.roomId,
+                'Kullanici_ID': item.userId,
+                'Toplam_Dakika': item.totalMinutes.toFixed(2),
+                'Ziyaret_Sayisi': item.visits
+            }));
+            
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sonuçlar");
+            XLSX.writeFile(wb, `oda_analiz_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        function resetApp() {
+            document.getElementById('uploadSection').classList.remove('hidden');
+            document.getElementById('loadingSection').classList.add('hidden');
+            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('fileInput').value = '';
+            analysisData = [];
+            if(chartInstance) chartInstance.destroy();
+        }
+    </script>
+</body>
+</html>

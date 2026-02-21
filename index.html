@@ -199,9 +199,13 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Results */
+        /* Results - BURASI ÖNEMLİ */
         .results {
             display: none;
+        }
+
+        .results.active {
+            display: block !important;
             animation: fadeIn 0.5s ease;
         }
 
@@ -319,11 +323,13 @@
         .chart-wrapper {
             position: relative;
             height: 400px;
+            width: 100%;
         }
 
         .pie-wrapper {
             position: relative;
             height: 350px;
+            width: 100%;
         }
 
         /* Table */
@@ -456,6 +462,11 @@
             border: 1px solid #9ae6b4;
         }
 
+        /* Hidden utility */
+        .hidden {
+            display: none !important;
+        }
+
         /* Responsive */
         @media (max-width: 968px) {
             .charts-section {
@@ -544,7 +555,7 @@
                             <span class="cn">预期列：房间ID, 用户ID, 进入时间, 离开时间</span>
                         </div>
                     </div>
-                    <button class="btn-primary">
+                    <button class="btn-primary" onclick="event.stopPropagation(); document.getElementById('fileInput').click();">
                         <span>📁 </span>
                         <span>
                             <div class="bilingual-header" style="font-size: 0.9em;">
@@ -821,7 +832,7 @@
             }
 
             document.getElementById('uploadSection').classList.add('hidden');
-            document.getElementById('loadingSection').classList.remove('hidden');
+            document.getElementById('loadingSection').style.display = 'block';
 
             const reader = new FileReader();
             
@@ -890,7 +901,6 @@
                         return;
                     }
                     
-                    // Benzersiz oda ID'sini kaydet
                     uniqueRooms.add(String(roomId));
                     totalRecords++;
                     
@@ -959,34 +969,47 @@
         }
 
         function displayResults(totalRecords) {
-            document.getElementById('loadingSection').classList.add('hidden');
-            document.getElementById('resultsSection').classList.remove('hidden');
+            // Önce loading'i gizle
+            document.getElementById('loadingSection').style.display = 'none';
+            
+            // Sonra results'ı göster - active class ekle
+            const resultsSection = document.getElementById('resultsSection');
+            resultsSection.style.display = 'block';
+            resultsSection.classList.add('active');
             
             const totalTime = analysisData.reduce((sum, item) => sum + item.totalMinutes, 0);
-            const avgTime = totalTime / uniqueRooms.size; // Benzersiz oda sayısına böl
+            const avgTime = totalTime / uniqueRooms.size;
             
-            // İstatistikler - BENZERSİZ oda sayısı
+            // İstatistikler
             document.getElementById('statUniqueRooms').textContent = uniqueRooms.size;
             document.getElementById('statTotalRecords').textContent = totalRecords;
             document.getElementById('statTotalTime').textContent = totalTime.toFixed(1);
             document.getElementById('statAvgTime').textContent = avgTime.toFixed(1);
             document.getElementById('statTopRoom').textContent = analysisData[0].roomId;
             
-            // Grafikler
-            createCharts(totalTime);
-            
-            // Tablo
-            renderTable(totalTime);
+            // Grafikler - setTimeout ile DOM'un güncellenmesini bekle
+            setTimeout(() => {
+                createCharts(totalTime);
+                renderTable(totalTime);
+            }, 100);
             
             showAlert(`Analiz tamamlandı! / 分析完成！ ${uniqueRooms.size} benzersiz oda / 个独特房间`, 'success');
         }
 
         function createCharts(totalTime) {
             // Bar Chart
-            const ctxBar = document.getElementById('barChart').getContext('2d');
+            const barCanvas = document.getElementById('barChart');
+            if (!barCanvas) {
+                console.error('Bar chart canvas bulunamadı');
+                return;
+            }
+            
+            const ctxBar = barCanvas.getContext('2d');
             const top15 = analysisData.slice(0, 15);
             
-            if (barChartInstance) barChartInstance.destroy();
+            if (barChartInstance) {
+                barChartInstance.destroy();
+            }
             
             barChartInstance = new Chart(ctxBar, {
                 type: 'bar',
@@ -1030,7 +1053,13 @@
             });
             
             // Pie Chart
-            const ctxPie = document.getElementById('pieChart').getContext('2d');
+            const pieCanvas = document.getElementById('pieChart');
+            if (!pieCanvas) {
+                console.error('Pie chart canvas bulunamadı');
+                return;
+            }
+            
+            const ctxPie = pieCanvas.getContext('2d');
             const top5 = analysisData.slice(0, 5);
             const othersTime = analysisData.slice(5).reduce((sum, item) => sum + item.totalMinutes, 0);
             
@@ -1039,7 +1068,9 @@
                 pieData.push({ roomId: 'Diğerleri / 其他', totalMinutes: othersTime });
             }
             
-            if (pieChartInstance) pieChartInstance.destroy();
+            if (pieChartInstance) {
+                pieChartInstance.destroy();
+            }
             
             pieChartInstance = new Chart(ctxPie, {
                 type: 'doughnut',
@@ -1082,6 +1113,11 @@
 
         function renderTable(totalTime) {
             const tbody = document.getElementById('tableBody');
+            if (!tbody) {
+                console.error('Table body bulunamadı');
+                return;
+            }
+            
             tbody.innerHTML = '';
             
             analysisData.forEach((item, index) => {
@@ -1184,13 +1220,24 @@
 
         function resetApp() {
             document.getElementById('uploadSection').classList.remove('hidden');
-            document.getElementById('loadingSection').classList.add('hidden');
-            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('loadingSection').style.display = 'none';
+            
+            const resultsSection = document.getElementById('resultsSection');
+            resultsSection.style.display = 'none';
+            resultsSection.classList.remove('active');
+            
             document.getElementById('fileInput').value = '';
             analysisData = [];
             uniqueRooms = new Set();
-            if (barChartInstance) barChartInstance.destroy();
-            if (pieChartInstance) pieChartInstance.destroy();
+            
+            if (barChartInstance) {
+                barChartInstance.destroy();
+                barChartInstance = null;
+            }
+            if (pieChartInstance) {
+                pieChartInstance.destroy();
+                pieChartInstance = null;
+            }
         }
     </script>
 </body>
